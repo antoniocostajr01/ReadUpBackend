@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum BookStatus {
+  read
+  reading
+  i_want_to_read
+  abandoned
+  rereading
+}
+
+model User {
+  id String @id @default(uuid())
+  name String?
+  email String @unique
+  passwordHash String? 
+  appleId String? @unique
+  createdAt DateTime @default(now())
+
+  books Book[]
+}
+
+model Book {
+  id          String     @id @default(uuid())
+  userId      String
+  title       String
+  author      String?
+  totalPages  Int
+  details     String?
+  coverUrl    String?
+  status      BookStatus @default(reading)
+  progress    Int        @default(0)
+  createdAt   DateTime   @default(now())
+
+  user        User       @relation(fields: [userId], references: [id])
+  
+  sessions    ReadingSession[] 
+}
+
+model ReadingSession {
+  id String @id @default(uuid())
+  bookId String
+  pagesRead Int
+  thoughts String?
+  readingTimeMinutes Int
+  date DateTime @default(now())
+  book Book @relation(fields: [bookId], references: [id])
+}
