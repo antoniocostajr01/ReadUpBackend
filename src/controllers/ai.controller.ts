@@ -1,11 +1,10 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AiService } from '../services/ai.service';
-import { AuthRequest } from '../middlewares/auth.middleware';
 
 export class AiController {
     private aiService = new AiService();
 
-    chat = async (req: AuthRequest, res: Response): Promise<void> => {
+    chat = async (req: Request, res: Response): Promise<void> => {
         try {
             const { message } = req.body;
 
