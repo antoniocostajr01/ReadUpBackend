@@ -1,24 +1,43 @@
-import { Prisma } from "@prisma/client";
-import { CrateBookDTO } from "../dtos/book.dto";
-import { prisma } from "../database";
+import { prisma } from '../database';
+import { CreateBookDTO, UpdateBookDTO } from '../dtos/book.dto';
 
 export class BookRepository {
-    async create(data: CrateBookDTO, userId: string) {
+    async create(data: CreateBookDTO, userId: string) {
         return await prisma.book.create({
             data: {
                 title: data.title,
                 author: data.author,
                 totalPages: data.totalPages,
-                userId: userId, // A mágica do relacionamento acontece aqui!
+                details: data.details,
+                coverUrl: data.coverUrl,
+                userId: userId,
             },
         });
     }
 
-    // Busca todos os livros de um usuário específico
     async findByUserId(userId: string) {
         return await prisma.book.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
-        })
+        });
+    }
+
+    async findById(id: string) {
+        return await prisma.book.findUnique({
+            where: { id },
+        });
+    }
+
+    async update(id: string, data: UpdateBookDTO) {
+        return await prisma.book.update({
+            where: { id },
+            data,
+        });
+    }
+
+    async delete(id: string) {
+        return await prisma.book.delete({
+            where: { id },
+        });
     }
 }
