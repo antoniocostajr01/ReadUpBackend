@@ -6,14 +6,28 @@ export class AiController {
 
     chat = async (req: Request, res: Response): Promise<void> => {
         try {
-            const { message } = req.body;
+            const { messages } = req.body;
 
-            if (!message || typeof message !== 'string' || message.trim().length === 0) {
-                res.status(400).json({ error: 'Message is required.' });
+            if (!messages || !Array.isArray(messages) || messages.length === 0) {
+                res.status(400).json({ error: 'Messages array is required.' });
                 return;
             }
 
-            const reply = await this.aiService.chat(message.trim());
+            // Valida que cada mensagem tem role e content
+            const isValid = messages.every(
+                (msg: any) =>
+                    msg &&
+                    typeof msg.content === 'string' &&
+                    msg.content.trim().length > 0 &&
+                    (msg.role === 'user' || msg.role === 'assistant')
+            );
+
+            if (!isValid) {
+                res.status(400).json({ error: 'Each message must have a valid role (user/assistant) and non-empty content.' });
+                return;
+            }
+
+            const reply = await this.aiService.chat(messages);
             res.status(200).json({ reply });
         } catch (error: any) {
             const status = error.message.includes('not configured') ? 500 : 502;

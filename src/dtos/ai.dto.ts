@@ -1,5 +1,10 @@
+export interface ChatMessageDTO {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
 export interface AIChatRequestDTO {
-    message: string;
+    messages: ChatMessageDTO[];
 }
 
 export interface AIChatResponseDTO {

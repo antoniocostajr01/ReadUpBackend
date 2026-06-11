@@ -25,7 +25,7 @@ export class BookController {
 
     getById = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
-            const book = await this.bookService.getBookById(req.params.id, req.userId!);
+            const book = await this.bookService.getBookById(req.params.id as string, req.userId!);
             res.status(200).json(book);
         } catch (error: any) {
             const status = error.message === 'Book not found' ? 404
@@ -37,7 +37,7 @@ export class BookController {
 
     update = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
-            const book = await this.bookService.updateBook(req.params.id, req.userId!, req.body);
+            const book = await this.bookService.updateBook(req.params.id as string, req.userId!, req.body);
             res.status(200).json(book);
         } catch (error: any) {
             const status = error.message === 'Book not found' ? 404
@@ -49,7 +49,7 @@ export class BookController {
 
     delete = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
-            await this.bookService.deleteBook(req.params.id, req.userId!);
+            await this.bookService.deleteBook(req.params.id as string, req.userId!);
             res.status(200).json({ message: 'Book deleted successfully' });
         } catch (error: any) {
             const status = error.message === 'Book not found' ? 404
