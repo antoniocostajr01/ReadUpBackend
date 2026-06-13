@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import { UserRepository } from '../repositories/user.repository';
-import { CreateUserDTO, UserResponseDTO } from '../dtos/user.dto';
+import { CreateUserDTO, UserResponseDTO, MeResponseDTO } from '../dtos/user.dto';
 
 export class UserService {
     //Repository é instanciado aqui para poder ser usado
@@ -41,5 +41,31 @@ export class UserService {
         };
 
         return response;
+    }
+
+    async getMe(userId: string): Promise<MeResponseDTO> {
+        const user = await this.userRepository.findById(userId);
+        if (!user) {
+            throw new Error('User not found.');
+        }
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            genres: user.genres,
+        };
+    }
+
+    async updateGenres(userId: string, genres: string[]): Promise<string[]> {
+        if (!Array.isArray(genres)) {
+            throw new Error('genres must be an array of strings.');
+        }
+        // Normaliza: remove vazios, duplicados e limita o tamanho.
+        const cleaned = Array.from(
+            new Set(genres.map(g => String(g).trim()).filter(g => g.length > 0))
+        ).slice(0, 30);
+
+        const updated = await this.userRepository.update(userId, { genres: cleaned });
+        return updated.genres;
     }
 }

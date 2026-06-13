@@ -9,6 +9,7 @@ export interface LoginResponseDTO {
         id: string;
         name: string | null;
         email: string;
+        genres: string[];
     };
     token: string;
 }

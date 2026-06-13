@@ -11,3 +11,14 @@ export interface UserResponseDTO {
     email: string;
     createdAt: Date;
 }
+
+export interface MeResponseDTO {
+    id: string;
+    name: string | null;
+    email: string;
+    genres: string[];
+}
+
+export interface UpdateGenresDTO {
+    genres: string[];
+}
