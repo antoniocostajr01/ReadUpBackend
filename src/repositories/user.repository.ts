@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../database';
 import { CreateUserDTO } from '../dtos/user.dto';
 
@@ -14,6 +15,12 @@ export class UserRepository {
         });
     }
 
+    async findById(id: string) {
+        return await prisma.user.findUnique({
+            where: { id }
+        });
+    }
+
     async create(data: CreateUserDTO, passwordHash?: string) {
         return await prisma.user.create({
             data: {
@@ -22,6 +29,13 @@ export class UserRepository {
                 appleId: data.appleId,
                 passwordHash: passwordHash
             },
+        });
+    }
+
+    async update(id: string, data: Prisma.UserUpdateInput) {
+        return await prisma.user.update({
+            where: { id },
+            data,
         });
     }
 }

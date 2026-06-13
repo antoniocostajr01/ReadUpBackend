@@ -15,6 +15,7 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "apple-signin-auth": "^2.0.0",
     "bcrypt": "^6.0.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3"

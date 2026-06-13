@@ -13,3 +13,19 @@ export interface LoginResponseDTO {
     token: string;
 }
 
+export interface AppleLoginRequestDTO {
+    identityToken: string;
+    fullName?: string;
+    email?: string;
+}
+
+export interface ForgotPasswordRequestDTO {
+    email: string;
+}
+
+export interface ResetPasswordRequestDTO {
+    email: string;
+    code: string;
+    newPassword: string;
+}
+
