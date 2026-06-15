@@ -2,6 +2,7 @@ import express from 'express';
 import { userRoutes } from './routes/user.routes';
 import { authRoutes } from './routes/auth.routes';
 import { bookRoutes } from './routes/book.routes';
+import { sessionRoutes } from './routes/reading-session.routes';
 import { aiRoutes } from './routes/ai.routes';
 
 const app = express();
@@ -17,6 +18,9 @@ app.use('/auth', authRoutes);
 
 //Rotas de /books
 app.use('/books', bookRoutes);
+
+//Rotas de /sessions
+app.use('/sessions', sessionRoutes);
 
 //Rotas de /ai
 app.use('/ai', aiRoutes);

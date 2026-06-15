@@ -17,42 +17,46 @@ enum BookStatus {
 }
 
 model User {
-  id String @id @default(uuid())
-  name String?
-  email String @unique
-  passwordHash String?
-  appleId String? @unique
-  resetCodeHash String?
+  id                 String    @id @default(uuid())
+  name               String?
+  email              String    @unique
+  passwordHash       String?
+  appleId            String?   @unique
+  resetCodeHash      String?
   resetCodeExpiresAt DateTime?
-  genres String[] @default([])
-  createdAt DateTime @default(now())
+  genres             String[]  @default([])
+  createdAt          DateTime  @default(now())
 
-  books Book[]
+  books    Book[]
+  sessions ReadingSession[]
 }
 
 model Book {
-  id          String     @id @default(uuid())
-  userId      String
-  title       String
-  author      String?
-  totalPages  Int
-  details     String?
-  coverUrl    String?
-  status      BookStatus @default(reading)
-  progress    Int        @default(0)
-  createdAt   DateTime   @default(now())
+  id         String     @id @default(uuid())
+  userId     String
+  title      String
+  author     String?
+  totalPages Int
+  details    String?
+  coverUrl   String?
+  status     BookStatus @default(reading)
+  progress   Int        @default(0)
+  createdAt  DateTime   @default(now())
 
-  user        User       @relation(fields: [userId], references: [id])
-  
-  sessions    ReadingSession[] 
+  user User @relation(fields: [userId], references: [id])
+
+  sessions ReadingSession[]
 }
 
 model ReadingSession {
-  id String @id @default(uuid())
-  bookId String
-  pagesRead Int
-  thoughts String?
-  readingTimeMinutes Int
-  date DateTime @default(now())
-  book Book @relation(fields: [bookId], references: [id])
+  id                 String   @id @default(uuid())
+  userId             String
+  bookId             String
+  pagesRead          Int
+  thoughts           String?
+  readingTimeSeconds Int
+  date               DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
 }
