@@ -56,6 +56,14 @@ export class UserService {
         };
     }
 
+    async deleteAccount(userId: string): Promise<void> {
+        const user = await this.userRepository.findById(userId);
+        if (!user) {
+            throw new Error('User not found.');
+        }
+        await this.userRepository.delete(userId);
+    }
+
     async updateGenres(userId: string, genres: string[]): Promise<string[]> {
         if (!Array.isArray(genres)) {
             throw new Error('genres must be an array of strings.');

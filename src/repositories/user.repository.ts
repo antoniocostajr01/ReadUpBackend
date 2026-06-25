@@ -38,4 +38,14 @@ export class UserRepository {
             data,
         });
     }
+
+    /// Exclui o usuário e TODOS os dados relacionados (sessões e livros) numa
+    /// transação única — garante que nada fica órfão se um passo falhar.
+    async delete(id: string) {
+        return await prisma.$transaction([
+            prisma.readingSession.deleteMany({ where: { userId: id } }),
+            prisma.book.deleteMany({ where: { userId: id } }),
+            prisma.user.delete({ where: { id } }),
+        ]);
+    }
 }

@@ -28,6 +28,15 @@ export class UserController {
         }
     };
 
+    deleteMe = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            await this.userService.deleteAccount(req.userId!);
+            res.status(204).send();
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    };
+
     updateGenres = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             const genres = await this.userService.updateGenres(req.userId!, req.body?.genres);
