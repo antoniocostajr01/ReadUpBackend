@@ -5,7 +5,11 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 const bookRoutes = Router();
 const bookController = new BookController();
 
-// Todas as rotas de Book exigem autenticação
+// Busca no Google Books é pública (convidados usam a aba de busca, sem conta).
+// Precisa vir ANTES do authMiddleware e antes de /:id.
+bookRoutes.get('/search', bookController.search);
+
+// As demais rotas de Book (biblioteca do usuário) exigem autenticação.
 bookRoutes.use(authMiddleware);
 
 bookRoutes.post('/', bookController.create);

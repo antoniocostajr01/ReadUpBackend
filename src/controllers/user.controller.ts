@@ -28,6 +28,18 @@ export class UserController {
         }
     };
 
+    updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            const updated = await this.userService.updateProfile(req.userId!, {
+                name: req.body?.name,
+                avatar: req.body?.avatar,
+            });
+            res.status(200).json(updated);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    };
+
     deleteMe = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             await this.userService.deleteAccount(req.userId!);

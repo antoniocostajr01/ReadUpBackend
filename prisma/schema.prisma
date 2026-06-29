@@ -20,6 +20,7 @@ model User {
   id                 String    @id @default(uuid())
   name               String?
   email              String    @unique
+  avatar             String?   @db.Text
   passwordHash       String?
   appleId            String?   @unique
   resetCodeHash      String?

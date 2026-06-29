@@ -8,7 +8,8 @@ import { aiRoutes } from './routes/ai.routes';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Limite ampliado para acomodar avatares em base64 enviados no PUT /users/me.
+app.use(express.json({ limit: '5mb' }));
 
 //Rotas de /users
 app.use('/users', userRoutes);

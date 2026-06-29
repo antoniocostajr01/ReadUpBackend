@@ -1,6 +1,9 @@
 import bcrypt from 'bcrypt';
 import { UserRepository } from '../repositories/user.repository';
-import { CreateUserDTO, UserResponseDTO, MeResponseDTO } from '../dtos/user.dto';
+import { CreateUserDTO, UserResponseDTO, MeResponseDTO, UpdateProfileDTO } from '../dtos/user.dto';
+
+// Limite defensivo do tamanho do avatar em base64 (~3MB). O app já comprime antes de enviar.
+const MAX_AVATAR_LENGTH = 3_000_000;
 
 export class UserService {
     //Repository é instanciado aqui para poder ser usado
@@ -52,6 +55,51 @@ export class UserService {
             id: user.id,
             name: user.name,
             email: user.email,
+            avatar: user.avatar,
+            genres: user.genres,
+        };
+    }
+
+    /**
+     * Atualiza nome e/ou foto do usuário (PUT /users/me).
+     * `avatar` deve ser uma string base64 (sem o prefixo data:). Enviar null remove a foto.
+     */
+    async updateProfile(userId: string, data: UpdateProfileDTO): Promise<MeResponseDTO> {
+        const update: { name?: string; avatar?: string | null } = {};
+
+        if (data.name !== undefined) {
+            const name = String(data.name).trim();
+            if (name.length === 0) {
+                throw new Error('Name cannot be empty.');
+            }
+            if (name.length > 60) {
+                throw new Error('Name is too long.');
+            }
+            update.name = name;
+        }
+
+        if (data.avatar !== undefined) {
+            if (data.avatar === null) {
+                update.avatar = null;
+            } else {
+                const avatar = String(data.avatar);
+                if (avatar.length > MAX_AVATAR_LENGTH) {
+                    throw new Error('Image is too large.');
+                }
+                update.avatar = avatar;
+            }
+        }
+
+        if (Object.keys(update).length === 0) {
+            throw new Error('Nothing to update.');
+        }
+
+        const user = await this.userRepository.update(userId, update);
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            avatar: user.avatar,
             genres: user.genres,
         };
     }

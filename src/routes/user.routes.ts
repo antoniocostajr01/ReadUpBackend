@@ -9,6 +9,7 @@ userRoutes.post('/', userController.register);
 
 // Rotas do usuário logado (exigem token)
 userRoutes.get('/me', authMiddleware, userController.me);
+userRoutes.put('/me', authMiddleware, userController.updateMe);
 userRoutes.delete('/me', authMiddleware, userController.deleteMe);
 userRoutes.put('/me/genres', authMiddleware, userController.updateGenres);
 

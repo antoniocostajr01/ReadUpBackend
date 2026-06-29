@@ -1,9 +1,30 @@
 import { Response } from 'express';
 import { BookService } from '../services/book.service';
+import { GoogleBooksService } from '../services/google-books.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 export class BookController {
     private bookService = new BookService();
+    private googleBooksService = new GoogleBooksService();
+
+    // Busca livros no Google Books (proxy) com ranking de relevância/recência.
+    search = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            const q = (req.query.q as string | undefined)?.trim() ?? '';
+            const mode = req.query.mode === 'browse' ? 'browse' : 'search';
+            const results = await this.googleBooksService.search({
+                query: q,
+                lang: req.query.lang as string | undefined,
+                maxResults: req.query.maxResults ? Number(req.query.maxResults) : undefined,
+                startIndex: req.query.startIndex ? Number(req.query.startIndex) : undefined,
+                country: req.query.country as string | undefined,
+                mode,
+            });
+            res.status(200).json(results);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    };
 
     create = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
