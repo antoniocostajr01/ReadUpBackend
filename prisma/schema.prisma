@@ -40,6 +40,8 @@ model Book {
   totalPages Int
   details    String?
   coverUrl   String?
+  isbn       String?
+  coverImage String?    @db.Text
   status     BookStatus @default(reading)
   progress   Int        @default(0)
   createdAt  DateTime   @default(now())
