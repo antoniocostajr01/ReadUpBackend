@@ -150,3 +150,58 @@ export async function browseSubject(
         limit: String(limit),
     }));
 }
+
+const WORKS_ENDPOINT = 'https://openlibrary.org/works';
+// 50 edições cobrem os idiomas populares sem baixar o catálogo inteiro da obra.
+const EDITIONS_LIMIT = 50;
+
+export interface LocalizedEdition {
+    title: string;
+    coverUrl: string | null;
+    totalPages: number | null;
+}
+
+interface EditionEntry {
+    title?: string;
+    languages?: { key: string }[];
+    covers?: number[];
+    number_of_pages?: number;
+}
+
+interface EditionsResponse {
+    entries?: EditionEntry[];
+}
+
+/**
+ * Acha a edição da obra no idioma pedido, pra mostrar "Harry Potter e a Pedra
+ * Filosofal" em vez do título canônico em inglês.
+ *
+ * Custa ~1,9s e 40 KB por obra — por isso o serviço resolve só os primeiros
+ * resultados e guarda em cache.
+ */
+export async function localizedEdition(
+    workId: string,
+    lang: SupportedLanguage
+): Promise<LocalizedEdition | null> {
+    const marc = toMarcLanguage(lang);
+    try {
+        const response = await fetch(`${WORKS_ENDPOINT}/${workId}/editions.json?limit=${EDITIONS_LIMIT}`);
+        if (!response.ok) return null;
+
+        const data = (await response.json()) as EditionsResponse;
+        const match = (data.entries ?? []).find(entry =>
+            Boolean(entry.title) &&
+            entry.languages?.some(language => language.key === `/languages/${marc}`)
+        );
+        if (!match) return null;
+
+        return {
+            title: match.title as string,
+            coverUrl: coverUrlFor(match.covers?.[0]),
+            totalPages: match.number_of_pages ?? null,
+        };
+    } catch (error) {
+        console.error('Open Library editions unreachable:', error);
+        return null;
+    }
+}

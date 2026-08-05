@@ -5,6 +5,7 @@ import {
     toDTO,
     searchWorks,
     browseSubject,
+    localizedEdition,
     OpenLibraryDoc,
 } from './openlibrary.provider';
 
@@ -127,4 +128,54 @@ test('devolve lista vazia quando a Open Library responde erro', async () => {
 test('devolve lista vazia quando o fetch lança', async () => {
     mock.method(globalThis, 'fetch', async () => { throw new Error('offline'); });
     assert.deepEqual(await searchWorks('qualquer', 'pt', 20, 0), []);
+});
+
+test('localizedEdition escolhe a primeira edição no idioma pedido', async () => {
+    const { urls } = stubFetch({
+        entries: [
+            { title: 'Harry Potter and the Sorcerer\'s Stone', languages: [{ key: '/languages/eng' }], covers: [1], number_of_pages: 309 },
+            { title: 'Harry Potter e a Pedra Filosofal', languages: [{ key: '/languages/por' }], covers: [42], number_of_pages: 264 },
+        ],
+    });
+
+    const edition = await localizedEdition('OL82563W', 'pt');
+
+    assert.ok(urls[0].includes('/works/OL82563W/editions.json'));
+    assert.equal(edition?.title, 'Harry Potter e a Pedra Filosofal');
+    assert.equal(edition?.coverUrl, 'https://covers.openlibrary.org/b/id/42-M.jpg');
+    assert.equal(edition?.totalPages, 264);
+});
+
+test('localizedEdition devolve null quando não há edição no idioma', async () => {
+    stubFetch({
+        entries: [
+            { title: 'Only English', languages: [{ key: '/languages/eng' }], covers: [1] },
+        ],
+    });
+    assert.equal(await localizedEdition('OL1W', 'pt'), null);
+});
+
+test('localizedEdition ignora edição sem título', async () => {
+    stubFetch({
+        entries: [
+            { languages: [{ key: '/languages/por' }], covers: [1] },
+            { title: 'Título Válido', languages: [{ key: '/languages/por' }], covers: [2] },
+        ],
+    });
+    const edition = await localizedEdition('OL1W', 'pt');
+    assert.equal(edition?.title, 'Título Válido');
+});
+
+test('localizedEdition tolera edição sem capa e sem páginas', async () => {
+    stubFetch({
+        entries: [{ title: 'Sem Nada', languages: [{ key: '/languages/por' }] }],
+    });
+    const edition = await localizedEdition('OL1W', 'pt');
+    assert.equal(edition?.coverUrl, null);
+    assert.equal(edition?.totalPages, null);
+});
+
+test('localizedEdition devolve null quando a Open Library falha', async () => {
+    mock.method(globalThis, 'fetch', async () => new Response('boom', { status: 500 }));
+    assert.equal(await localizedEdition('OL1W', 'pt'), null);
 });
