@@ -1,25 +1,29 @@
 import { Response } from 'express';
 import { BookService } from '../services/book.service';
-import { GoogleBooksService } from '../services/google-books.service';
+import { BookSearchService } from '../services/search/book-search.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 export class BookController {
     private bookService = new BookService();
-    private googleBooksService = new GoogleBooksService();
+    private bookSearchService = new BookSearchService();
 
-    // Busca livros no Google Books (proxy) com ranking de relevância/recência.
+    // Busca de livros: Open Library como índice, Google Books como fallback.
+    // `mode=browse` é a vitrine por gênero; qualquer outro valor é busca livre.
     search = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             const q = (req.query.q as string | undefined)?.trim() ?? '';
-            const mode = req.query.mode === 'browse' ? 'browse' : 'search';
-            const results = await this.googleBooksService.search({
-                query: q,
-                lang: req.query.lang as string | undefined,
-                maxResults: req.query.maxResults ? Number(req.query.maxResults) : undefined,
-                startIndex: req.query.startIndex ? Number(req.query.startIndex) : undefined,
-                country: req.query.country as string | undefined,
-                mode,
-            });
+            const lang = req.query.lang as string | undefined;
+            const maxResults = req.query.maxResults ? Number(req.query.maxResults) : undefined;
+
+            const results = req.query.mode === 'browse'
+                ? await this.bookSearchService.browse({ subject: q, lang, maxResults })
+                : await this.bookSearchService.search({
+                    query: q,
+                    lang,
+                    maxResults,
+                    startIndex: req.query.startIndex ? Number(req.query.startIndex) : undefined,
+                });
+
             res.status(200).json(results);
         } catch (error: any) {
             res.status(400).json({ error: error.message });
