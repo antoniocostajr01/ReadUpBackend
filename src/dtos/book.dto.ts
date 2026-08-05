@@ -18,7 +18,7 @@ export interface UpdateBookDTO {
     progress?: number;
 }
 
-/** Resultado da busca no Google Books (proxy). Espelha o `SearchBook` do app. */
+/** Resultado de busca de livro. Espelha o `SearchBook` do app. */
 export interface SearchBookDTO {
     id: string;
     title: string;
@@ -28,8 +28,6 @@ export interface SearchBookDTO {
     coverUrl: string | null;
     language: string;
     publishedDate: string | null;
-    averageRating: number | null;
-    ratingsCount: number | null;
 }
 
 export interface BookResponseDTO {
