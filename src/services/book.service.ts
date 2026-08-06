@@ -1,10 +1,14 @@
 import { BookRepository } from '../repositories/book.repository';
 import { CreateBookDTO, UpdateBookDTO, BookResponseDTO } from '../dtos/book.dto';
 
+// Limite defensivo do tamanho da capa em base64 (~2MB). O app já comprime antes de enviar.
+const MAX_COVER_IMAGE_LENGTH = 2_000_000;
+
 export class BookService {
     private bookRepository = new BookRepository();
 
     async createBook(data: CreateBookDTO, userId: string): Promise<BookResponseDTO> {
+        this.validateCoverImage(data.coverImage);
         const book = await this.bookRepository.create(data, userId);
         return this.toResponseDTO(book);
     }
@@ -20,6 +24,7 @@ export class BookService {
     }
 
     async updateBook(id: string, userId: string, data: UpdateBookDTO): Promise<BookResponseDTO> {
+        this.validateCoverImage(data.coverImage);
         await this.findAndAuthorize(id, userId);
         const updated = await this.bookRepository.update(id, data);
         return this.toResponseDTO(updated);
@@ -43,6 +48,12 @@ export class BookService {
         }
 
         return book;
+    }
+
+    private validateCoverImage(coverImage?: string): void {
+        if (coverImage !== undefined && coverImage.length > MAX_COVER_IMAGE_LENGTH) {
+            throw new Error('Cover image is too large.');
+        }
     }
 
     private toResponseDTO(book: any): BookResponseDTO {
