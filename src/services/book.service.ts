@@ -73,6 +73,7 @@ export class BookService {
             totalPages: book.totalPages,
             details: book.details,
             coverUrl: book.coverImage ? `${baseUrl}/books/${book.id}/cover` : book.coverUrl,
+            isbn: book.isbn,
             status: book.status,
             progress: book.progress,
             userId: book.userId,

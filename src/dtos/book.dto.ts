@@ -41,6 +41,7 @@ export interface BookResponseDTO {
     totalPages: number;
     details: string | null;
     coverUrl: string | null;
+    isbn: string | null;
     status: BookStatus;
     progress: number;
     userId: string;
