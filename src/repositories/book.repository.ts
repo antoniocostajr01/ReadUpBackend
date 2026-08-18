@@ -12,6 +12,9 @@ export class BookRepository {
                 coverUrl: data.coverUrl,
                 isbn: data.isbn,
                 coverImage: data.coverImage,
+                // Sem isto o Prisma aplica o default `reading` e o status escolhido pelo
+                // usuário (no scanner e na busca) era descartado em silêncio.
+                status: data.status,
                 userId: userId,
             },
         });

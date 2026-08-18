@@ -1,4 +1,5 @@
 import { BookRepository } from '../repositories/book.repository';
+import { BookStatus } from '@prisma/client';
 import { CreateBookDTO, UpdateBookDTO, BookResponseDTO } from '../dtos/book.dto';
 
 // Limite defensivo do tamanho da capa em base64 (~2MB). O app já comprime antes de enviar.
@@ -9,6 +10,7 @@ export class BookService {
 
     async createBook(data: CreateBookDTO, userId: string, baseUrl: string): Promise<BookResponseDTO> {
         this.validateCoverImage(data.coverImage);
+        this.validateStatus(data.status);
         const book = await this.bookRepository.create(data, userId);
         return this.toResponseDTO(book, baseUrl);
     }
@@ -57,6 +59,13 @@ export class BookService {
         }
 
         return book;
+    }
+
+    /** `status` vem do corpo da requisição; sem checar, o Prisma estoura com um erro cru. */
+    private validateStatus(status?: BookStatus): void {
+        if (status && !Object.values(BookStatus).includes(status)) {
+            throw new Error('Invalid book status');
+        }
     }
 
     private validateCoverImage(coverImage?: string): void {

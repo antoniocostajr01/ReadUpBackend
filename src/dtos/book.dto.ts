@@ -8,6 +8,7 @@ export interface CreateBookDTO {
     coverUrl?: string;
     isbn?: string;
     coverImage?: string;
+    status?: BookStatus;
 }
 
 export interface UpdateBookDTO {
