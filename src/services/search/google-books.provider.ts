@@ -48,6 +48,30 @@ function toDTO(volume: GoogleVolume): SearchBookDTO {
     };
 }
 
+/** Mesmo papel de rede de segurança, mas pro lookup por ISBN. Sem langRestrict: o
+ * ISBN já identifica uma edição específica, restringir por idioma só derrubaria o match. */
+export async function lookupIsbnFallback(isbn: string): Promise<SearchBookDTO | null> {
+    const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+    if (!apiKey) return null;
+
+    const params = new URLSearchParams({
+        q: `isbn:${isbn}`,
+        maxResults: '1',
+        key: apiKey,
+    });
+
+    try {
+        const response = await fetch(`${ENDPOINT}?${params.toString()}`);
+        if (!response.ok) return null;
+        const data = (await response.json()) as GoogleResponse;
+        const volume = (data.items ?? []).find(item => Boolean(item.volumeInfo?.title));
+        return volume ? toDTO(volume) : null;
+    } catch (error) {
+        console.error('Google Books fallback unreachable:', error);
+        return null;
+    }
+}
+
 export async function searchFallback(
     query: string,
     lang: SupportedLanguage,

@@ -10,6 +10,8 @@ export class BookRepository {
                 totalPages: data.totalPages,
                 details: data.details,
                 coverUrl: data.coverUrl,
+                isbn: data.isbn,
+                coverImage: data.coverImage,
                 userId: userId,
             },
         });

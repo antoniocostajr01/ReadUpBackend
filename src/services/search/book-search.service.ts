@@ -1,7 +1,7 @@
 import { SearchBookDTO } from '../../dtos/book.dto';
 import { resolveLanguage, SupportedLanguage } from './language';
-import { browseSubject, filterDocs, localizedEdition, searchWorks, toDTO, LocalizedEdition } from './openlibrary.provider';
-import { searchFallback } from './google-books.provider';
+import { browseSubject, filterDocs, localizedEdition, lookupIsbn, searchWorks, toDTO, LocalizedEdition } from './openlibrary.provider';
+import { lookupIsbnFallback, searchFallback } from './google-books.provider';
 import { TtlCache } from './ttl-cache';
 
 /**
@@ -23,6 +23,9 @@ const OVERFETCH_FACTOR = 2;
 const EDITION_TTL_MS = 24 * 60 * 60 * 1000;
 // Vitrine de gênero é igual pra todo usuário do mesmo idioma e abre a cada sessão.
 const GENRE_TTL_MS = 6 * 60 * 60 * 1000;
+// Um ISBN nunca passa a apontar pra outro livro: TTL longo, e vale cachear até o "não achei".
+const ISBN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ISBN_PATTERN = /^(\d{9}[\dX]|\d{13})$/;
 
 export interface SearchOptions {
     query: string;
@@ -45,6 +48,9 @@ export class BookSearchService {
     // acerto seria baixo e o custo de resultado velho é real.
     private editionCache = new TtlCache<LocalizedEdition | null>(EDITION_TTL_MS);
     private genreCache = new TtlCache<SearchBookDTO[]>(GENRE_TTL_MS);
+    // Cacheia também o "não achei" (null): um ISBN ausente dos dois índices agora
+    // não vai aparecer de repente daqui a uma hora.
+    private isbnCache = new TtlCache<SearchBookDTO | null>(ISBN_TTL_MS);
 
     async search(options: SearchOptions): Promise<SearchBookDTO[]> {
         const query = options.query.trim();
@@ -62,6 +68,28 @@ export class BookSearchService {
         }
 
         return this.localize(docs.slice(0, limit).map(toDTO), lang);
+    }
+
+    /** Lookup por código de barras (EAN-13/ISBN-13, ou ISBN-10 legado). Open Library
+     * primeiro, Google Books como rede de segurança, igual ao fluxo de busca livre. */
+    async lookupIsbn(isbn: string): Promise<SearchBookDTO | null> {
+        const normalized = isbn.replace(/[^0-9Xx]/g, '').toUpperCase();
+        if (!ISBN_PATTERN.test(normalized)) return null;
+
+        // Sem chave por idioma: o ISBN identifica uma edição só, e ela é a mesma pra
+        // qualquer usuário — o resultado não depende do idioma do app.
+        const cached = this.isbnCache.get(normalized);
+        if (cached !== undefined) return cached;
+
+        // Sem `localize`: ela troca o título pelo da edição PT da obra, e aqui a edição
+        // certa já veio do próprio código de barras — trocar seria desfazer o acerto.
+        const doc = await lookupIsbn(normalized);
+        const result = doc
+            ? toDTO(doc)
+            : await lookupIsbnFallback(normalized);
+
+        this.isbnCache.set(normalized, result);
+        return result;
     }
 
     async browse(options: BrowseOptions): Promise<SearchBookDTO[]> {

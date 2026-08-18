@@ -6,8 +6,11 @@ const bookRoutes = Router();
 const bookController = new BookController();
 
 // Busca no Google Books é pública (convidados usam a aba de busca, sem conta).
+// Lookup por ISBN (scanner de código de barras) idem — sem conta, sem fricção.
 // Precisa vir ANTES do authMiddleware e antes de /:id.
 bookRoutes.get('/search', bookController.search);
+bookRoutes.get('/lookup', bookController.lookup);
+bookRoutes.get('/:id/cover', bookController.getCover);
 
 // As demais rotas de Book (biblioteca do usuário) exigem autenticação.
 bookRoutes.use(authMiddleware);

@@ -6,6 +6,11 @@ import { sessionRoutes } from './routes/reading-session.routes';
 import { aiRoutes } from './routes/ai.routes';
 
 const app = express();
+
+// Render termina o TLS e repassa via X-Forwarded-Proto; sem isso, req.protocol
+// sempre reporta "http" e a URL de capa gerada abaixo quebraria em produção.
+app.set('trust proxy', true);
+
 const PORT = process.env.PORT || 3000;
 
 // Limite ampliado para acomodar avatares em base64 enviados no PUT /users/me.

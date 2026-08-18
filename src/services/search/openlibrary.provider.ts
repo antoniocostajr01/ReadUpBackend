@@ -133,6 +133,63 @@ export async function searchWorks(
     }));
 }
 
+const ISBN_ENDPOINT = 'https://openlibrary.org/isbn';
+
+interface IsbnEdition {
+    title?: string;
+    works?: { key: string }[];
+    number_of_pages?: number;
+    covers?: number[];
+}
+
+/** Registro da EDIÇÃO com aquele ISBN. 404 (ou qualquer falha) vira null. */
+async function fetchEdition(isbn: string): Promise<IsbnEdition | null> {
+    try {
+        const response = await fetch(`${ISBN_ENDPOINT}/${isbn}.json`);
+        if (!response.ok) return null;
+        return (await response.json()) as IsbnEdition;
+    } catch (error) {
+        console.error('Open Library edition unreachable:', error);
+        return null;
+    }
+}
+
+/**
+ * Lookup por ISBN exato (scanner de código de barras). Duas etapas de propósito:
+ *
+ * `search.json?q=isbn:X` NÃO é exato — pra 9789999999991 ele devolve três obras e a
+ * primeira não é a do código de barras. Num scanner, devolver o livro errado é o pior
+ * defeito possível, então quem resolve o ISBN é `/isbn/{isbn}.json`: é o registro da
+ * edição, dá 404 quando não existe e nunca inventa um vizinho parecido.
+ *
+ * Esse registro porém só traz CHAVES de autor, não nomes — daí o segundo request pela
+ * obra, que reaproveita o mesmo doc e o mesmo `toDTO` da busca livre. Sem `filterDocs`:
+ * o heurístico de popularidade separa obra de derivado numa busca por texto, e aqui o
+ * livro já está na mão do usuário, mesmo sendo um título de nicho.
+ */
+export async function lookupIsbn(isbn: string): Promise<OpenLibraryDoc | null> {
+    const edition = await fetchEdition(isbn);
+    const workKey = edition?.works?.[0]?.key;
+    if (!workKey) return null;
+
+    const docs = await fetchDocs(new URLSearchParams({
+        q: `key:${workKey}`,
+        fields: SEARCH_FIELDS,
+        limit: '1',
+    }));
+    const doc = docs[0];
+    if (!doc) return null;
+
+    // A edição é o objeto físico na mão do usuário: título, páginas e capa dela ganham
+    // dos valores da obra (que são o canônico em inglês e a mediana de todas as edições).
+    return {
+        ...doc,
+        title: edition?.title ?? doc.title,
+        number_of_pages_median: edition?.number_of_pages ?? doc.number_of_pages_median,
+        cover_i: edition?.covers?.[0] ?? doc.cover_i,
+    };
+}
+
 export async function browseSubject(
     subject: string,
     lang: SupportedLanguage,

@@ -161,3 +161,79 @@ test('respeita maxResults', async () => {
 
     assert.equal(results.length, 5);
 });
+
+test('lookupIsbn acha na Open Library', async () => {
+    stubRoutes([
+        { match: '/isbn/', body: { title: 'Harry Potter e a Pedra Filosofal', works: [{ key: '/works/OL82563W' }], number_of_pages: 264, covers: [42] } },
+        { match: 'openlibrary.org/search.json', body: { docs: [HP_DOC] } },
+    ]);
+
+    const result = await new BookSearchService().lookupIsbn('9780747532699');
+
+    // Título/páginas/capa vêm da EDIÇÃO escaneada; autor e sinopse, da obra.
+    assert.equal(result?.title, 'Harry Potter e a Pedra Filosofal');
+    assert.equal(result?.totalPages, 264);
+    assert.equal(result?.author, 'J. K. Rowling');
+    assert.match(result?.coverUrl ?? '', /42-M\.jpg$/);
+});
+
+test('lookupIsbn ignora o resultado difuso: sem edição, não devolve livro parecido', async () => {
+    // search.json?q=isbn: devolve obras que não são a do código de barras. Se a edição
+    // não existe (404), o lookup tem que dar null em vez de aceitar o vizinho.
+    const { urls } = stubRoutes([
+        { match: '/isbn/', body: {}, status: 404 },
+        { match: 'openlibrary.org/search.json', body: { docs: [HP_DOC] } },
+    ]);
+
+    const result = await new BookSearchService().lookupIsbn('9789999999991');
+
+    assert.equal(result, null);
+    assert.equal(urls.filter(url => url.includes('search.json')).length, 0);
+});
+
+test('lookupIsbn cai no Google quando a Open Library não tem a edição', async () => {
+    stubRoutes([
+        { match: '/isbn/', body: {}, status: 404 },
+        { match: 'googleapis.com', body: { items: [{ id: 'g1', volumeInfo: { title: 'Torto Arado', authors: ['Itamar Vieira Junior'], pageCount: 264 } }] } },
+    ]);
+    process.env.GOOGLE_BOOKS_API_KEY = 'test-key';
+
+    const result = await new BookSearchService().lookupIsbn('9780747532699');
+
+    delete process.env.GOOGLE_BOOKS_API_KEY;
+    assert.equal(result?.title, 'Torto Arado');
+});
+
+test('lookupIsbn devolve null quando os dois índices vêm vazios', async () => {
+    stubRoutes([
+        { match: '/isbn/', body: {}, status: 404 },
+        { match: 'googleapis.com', body: { items: [] } },
+    ]);
+
+    const result = await new BookSearchService().lookupIsbn('9780747532699');
+
+    assert.equal(result, null);
+});
+
+test('lookupIsbn com ISBN malformado devolve null sem chamar rede', async () => {
+    const { urls } = stubRoutes([{ match: '/isbn/', body: { works: [{ key: '/works/OL82563W' }] } }]);
+
+    const result = await new BookSearchService().lookupIsbn('abc');
+
+    assert.equal(result, null);
+    assert.equal(urls.length, 0);
+});
+
+test('lookupIsbn com o mesmo ISBN duas vezes só bate na Open Library uma vez', async () => {
+    const { urls } = stubRoutes([
+        { match: '/isbn/', body: { title: 'HP', works: [{ key: '/works/OL82563W' }] } },
+        { match: 'openlibrary.org/search.json', body: { docs: [HP_DOC] } },
+    ]);
+
+    const service = new BookSearchService();
+    await service.lookupIsbn('9780747532699');
+    const afterFirst = urls.length;
+    await service.lookupIsbn('9780747532699');
+
+    assert.equal(urls.length, afterFirst, 'segunda chamada não bateu na rede');
+});

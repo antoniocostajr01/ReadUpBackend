@@ -6,6 +6,8 @@ export interface CreateBookDTO {
     totalPages: number;
     details?: string;
     coverUrl?: string;
+    isbn?: string;
+    coverImage?: string;
 }
 
 export interface UpdateBookDTO {
@@ -14,6 +16,8 @@ export interface UpdateBookDTO {
     totalPages?: number;
     details?: string;
     coverUrl?: string;
+    isbn?: string;
+    coverImage?: string;
     status?: BookStatus;
     progress?: number;
 }
@@ -37,6 +41,7 @@ export interface BookResponseDTO {
     totalPages: number;
     details: string | null;
     coverUrl: string | null;
+    isbn: string | null;
     status: BookStatus;
     progress: number;
     userId: string;
