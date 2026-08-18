@@ -162,7 +162,7 @@ test('respeita maxResults', async () => {
     assert.equal(results.length, 5);
 });
 
-test('lookupIsbn acha na Open Library', async () => {
+test('lookupIsbn usa a edição escaneada, não o canônico da obra', async () => {
     stubRoutes([
         { match: '/isbn/', body: { title: 'Harry Potter e a Pedra Filosofal', works: [{ key: '/works/OL82563W' }], number_of_pages: 264, covers: [42] } },
         { match: 'openlibrary.org/search.json', body: { docs: [HP_DOC] } },
@@ -170,16 +170,47 @@ test('lookupIsbn acha na Open Library', async () => {
 
     const result = await new BookSearchService().lookupIsbn('9780747532699');
 
-    // Título/páginas/capa vêm da EDIÇÃO escaneada; autor e sinopse, da obra.
     assert.equal(result?.title, 'Harry Potter e a Pedra Filosofal');
     assert.equal(result?.totalPages, 264);
     assert.equal(result?.author, 'J. K. Rowling');
-    assert.match(result?.coverUrl ?? '', /42-M\.jpg$/);
+    assert.match(result?.coverUrl ?? '', /42-L\.jpg$/, 'detalhe pede capa L, não M');
 });
 
-test('lookupIsbn ignora o resultado difuso: sem edição, não devolve livro parecido', async () => {
-    // search.json?q=isbn: devolve obras que não são a do código de barras. Se a edição
-    // não existe (404), o lookup tem que dar null em vez de aceitar o vizinho.
+test('lookupIsbn completa com o Google o que a Open Library deixa vazio', async () => {
+    // Caso real: livro nacional que a OL indexa com capa mas sem páginas nem sinopse.
+    stubRoutes([
+        { match: '/isbn/', body: { title: 'Entendendo Algoritmos', works: [{ key: '/works/OL34952200W' }], covers: [13780321] } },
+        { match: 'openlibrary.org/search.json', body: { docs: [{ key: '/works/OL34952200W', title: 'Entendendo Algoritmos', author_name: ['Aditya Y. Bhargava'], cover_i: 13780321 }] } },
+        { match: 'googleapis.com', body: { items: [{ id: 'g1', volumeInfo: { title: 'Entendendo Algoritmos', pageCount: 264, description: 'Um guia ilustrado.', industryIdentifiers: [{ type: 'ISBN_13', identifier: '9788575225639' }] } }] } },
+    ]);
+    process.env.GOOGLE_BOOKS_API_KEY = 'test-key';
+
+    const result = await new BookSearchService().lookupIsbn('9788575225639');
+
+    delete process.env.GOOGLE_BOOKS_API_KEY;
+    assert.equal(result?.totalPages, 264, 'páginas vieram do Google');
+    assert.equal(result?.details, 'Um guia ilustrado.', 'sinopse veio do Google');
+    assert.equal(result?.author, 'Aditya Y. Bhargava', 'autor continua o da Open Library');
+    assert.match(result?.coverUrl ?? '', /13780321-L\.jpg$/, 'capa continua a da Open Library');
+});
+
+test('lookupIsbn acha no Google o que a Open Library não indexa', async () => {
+    stubRoutes([
+        { match: '/isbn/', body: {}, status: 404 },
+        { match: 'googleapis.com', body: { items: [{ id: 'g1', volumeInfo: { title: 'Crime e Castigo', authors: ['Fiódor Dostoiévski'], pageCount: 592, imageLinks: { thumbnail: 'http://books.google.com/x&edge=curl' }, industryIdentifiers: [{ type: 'ISBN_13', identifier: '978-65-5888-148-3' }] } }] } },
+    ]);
+    process.env.GOOGLE_BOOKS_API_KEY = 'test-key';
+
+    const result = await new BookSearchService().lookupIsbn('9786558881483');
+
+    delete process.env.GOOGLE_BOOKS_API_KEY;
+    assert.equal(result?.title, 'Crime e Castigo');
+    assert.equal(result?.coverUrl, 'https://books.google.com/x');
+});
+
+test('lookupIsbn não aceita o vizinho difuso quando a edição não existe', async () => {
+    // search.json?q=isbn: devolve obras que não são a do código de barras; quem resolve
+    // o ISBN é /isbn/{isbn}.json, e 404 dele tem que virar null.
     const { urls } = stubRoutes([
         { match: '/isbn/', body: {}, status: 404 },
         { match: 'openlibrary.org/search.json', body: { docs: [HP_DOC] } },
@@ -191,20 +222,7 @@ test('lookupIsbn ignora o resultado difuso: sem edição, não devolve livro par
     assert.equal(urls.filter(url => url.includes('search.json')).length, 0);
 });
 
-test('lookupIsbn cai no Google quando a Open Library não tem a edição', async () => {
-    stubRoutes([
-        { match: '/isbn/', body: {}, status: 404 },
-        { match: 'googleapis.com', body: { items: [{ id: 'g1', volumeInfo: { title: 'Torto Arado', authors: ['Itamar Vieira Junior'], pageCount: 264 } }] } },
-    ]);
-    process.env.GOOGLE_BOOKS_API_KEY = 'test-key';
-
-    const result = await new BookSearchService().lookupIsbn('9780747532699');
-
-    delete process.env.GOOGLE_BOOKS_API_KEY;
-    assert.equal(result?.title, 'Torto Arado');
-});
-
-test('lookupIsbn devolve null quando os dois índices vêm vazios', async () => {
+test('lookupIsbn devolve null quando as duas bases vêm vazias', async () => {
     stubRoutes([
         { match: '/isbn/', body: {}, status: 404 },
         { match: 'googleapis.com', body: { items: [] } },
@@ -224,7 +242,7 @@ test('lookupIsbn com ISBN malformado devolve null sem chamar rede', async () => 
     assert.equal(urls.length, 0);
 });
 
-test('lookupIsbn com o mesmo ISBN duas vezes só bate na Open Library uma vez', async () => {
+test('lookupIsbn com o mesmo ISBN duas vezes não bate na rede de novo', async () => {
     const { urls } = stubRoutes([
         { match: '/isbn/', body: { title: 'HP', works: [{ key: '/works/OL82563W' }] } },
         { match: 'openlibrary.org/search.json', body: { docs: [HP_DOC] } },
@@ -236,4 +254,19 @@ test('lookupIsbn com o mesmo ISBN duas vezes só bate na Open Library uma vez', 
     await service.lookupIsbn('9780747532699');
 
     assert.equal(urls.length, afterFirst, 'segunda chamada não bateu na rede');
+});
+
+test('lookupIsbn descarta o volume do Google que não declara o ISBN pedido', async () => {
+    // `q=isbn:` do Google devolve um livro qualquer para ISBN inexistente — sem essa
+    // checagem o scanner adicionaria um livro que o usuário nunca escaneou.
+    stubRoutes([
+        { match: '/isbn/', body: {}, status: 404 },
+        { match: 'googleapis.com', body: { items: [{ id: 'g9', volumeInfo: { title: 'Livro Aleatório', industryIdentifiers: [{ type: 'ISBN_13', identifier: '9780306406157' }] } }] } },
+    ]);
+    process.env.GOOGLE_BOOKS_API_KEY = 'test-key';
+
+    const result = await new BookSearchService().lookupIsbn('9781111111119');
+
+    delete process.env.GOOGLE_BOOKS_API_KEY;
+    assert.equal(result, null);
 });

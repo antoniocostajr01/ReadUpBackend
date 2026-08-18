@@ -21,6 +21,7 @@ interface GoogleVolume {
         language?: string;
         publishedDate?: string;
         imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+        industryIdentifiers?: { type?: string; identifier?: string }[];
     };
 }
 
@@ -50,9 +51,25 @@ function toDTO(volume: GoogleVolume): SearchBookDTO {
 
 /** Mesmo papel de rede de segurança, mas pro lookup por ISBN. Sem langRestrict: o
  * ISBN já identifica uma edição específica, restringir por idioma só derrubaria o match. */
-export async function lookupIsbnFallback(isbn: string): Promise<SearchBookDTO | null> {
+/**
+ * Volume do Google com aquele ISBN. Não é mais "fallback": roda em paralelo com a Open
+ * Library porque as duas bases se completam — a OL tem capa e edição BR, o Google tem
+ * sinopse e contagem de páginas que a OL quase nunca traz.
+ */
+function carriesIsbn(volume: GoogleVolume, isbn: string): boolean {
+    return (volume.volumeInfo?.industryIdentifiers ?? []).some(
+        id => id.identifier?.replace(/[^0-9Xx]/g, '').toUpperCase() === isbn
+    );
+}
+
+export async function lookupIsbnVolume(isbn: string): Promise<SearchBookDTO | null> {
     const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey) {
+        // Sem a chave o scanner perde metade da cobertura em silêncio; aparecer no log
+        // é a diferença entre "livro não existe" e "faltou variável de ambiente".
+        console.warn('GOOGLE_BOOKS_API_KEY ausente: lookup por ISBN só usará a Open Library.');
+        return null;
+    }
 
     const params = new URLSearchParams({
         q: `isbn:${isbn}`,
@@ -64,7 +81,11 @@ export async function lookupIsbnFallback(isbn: string): Promise<SearchBookDTO | 
         const response = await fetch(`${ENDPOINT}?${params.toString()}`);
         if (!response.ok) return null;
         const data = (await response.json()) as GoogleResponse;
-        const volume = (data.items ?? []).find(item => Boolean(item.volumeInfo?.title));
+        // `q=isbn:` do Google é busca, não lookup: pra um ISBN inexistente ele devolve
+        // um livro qualquer. Só aceitamos o volume que declara aquele mesmo ISBN.
+        const volume = (data.items ?? []).find(item =>
+            Boolean(item.volumeInfo?.title) && carriesIsbn(item, isbn)
+        );
         return volume ? toDTO(volume) : null;
     } catch (error) {
         console.error('Google Books fallback unreachable:', error);

@@ -1,7 +1,7 @@
 import { SearchBookDTO } from '../../dtos/book.dto';
 import { resolveLanguage, SupportedLanguage } from './language';
 import { browseSubject, filterDocs, localizedEdition, lookupIsbn, searchWorks, toDTO, LocalizedEdition } from './openlibrary.provider';
-import { lookupIsbnFallback, searchFallback } from './google-books.provider';
+import { lookupIsbnVolume, searchFallback } from './google-books.provider';
 import { TtlCache } from './ttl-cache';
 
 /**
@@ -23,7 +23,7 @@ const OVERFETCH_FACTOR = 2;
 const EDITION_TTL_MS = 24 * 60 * 60 * 1000;
 // Vitrine de gênero é igual pra todo usuário do mesmo idioma e abre a cada sessão.
 const GENRE_TTL_MS = 6 * 60 * 60 * 1000;
-// Um ISBN nunca passa a apontar pra outro livro: TTL longo, e vale cachear até o "não achei".
+// Um ISBN nunca passa a apontar pra outro livro: TTL longo.
 const ISBN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const ISBN_PATTERN = /^(\d{9}[\dX]|\d{13})$/;
 
@@ -48,9 +48,7 @@ export class BookSearchService {
     // acerto seria baixo e o custo de resultado velho é real.
     private editionCache = new TtlCache<LocalizedEdition | null>(EDITION_TTL_MS);
     private genreCache = new TtlCache<SearchBookDTO[]>(GENRE_TTL_MS);
-    // Cacheia também o "não achei" (null): um ISBN ausente dos dois índices agora
-    // não vai aparecer de repente daqui a uma hora.
-    private isbnCache = new TtlCache<SearchBookDTO | null>(ISBN_TTL_MS);
+    private isbnCache = new TtlCache<SearchBookDTO>(ISBN_TTL_MS);
 
     async search(options: SearchOptions): Promise<SearchBookDTO[]> {
         const query = options.query.trim();
@@ -79,16 +77,23 @@ export class BookSearchService {
         // Sem chave por idioma: o ISBN identifica uma edição só, e ela é a mesma pra
         // qualquer usuário — o resultado não depende do idioma do app.
         const cached = this.isbnCache.get(normalized);
-        if (cached !== undefined) return cached;
+        if (cached) return cached;
 
-        // Sem `localize`: ela troca o título pelo da edição PT da obra, e aqui a edição
-        // certa já veio do próprio código de barras — trocar seria desfazer o acerto.
-        const doc = await lookupIsbn(normalized);
-        const result = doc
-            ? toDTO(doc)
-            : await lookupIsbnFallback(normalized);
+        // As duas bases em paralelo, e o melhor campo de cada uma. Nenhuma sozinha
+        // basta: a OL indexa a edição brasileira e tem capa, mas devolve páginas e
+        // sinopse vazias na maioria dos livros nacionais; o Google tem sinopse e
+        // páginas, mas não conhece parte das edições BR e às vezes não tem capa.
+        // Sem `localize`: a edição certa já veio do código de barras, trocar desfaria.
+        const [openLibrary, google] = await Promise.all([
+            lookupIsbn(normalized),
+            lookupIsbnVolume(normalized),
+        ]);
+        const result = this.mergeEditions(openLibrary, google);
 
-        this.isbnCache.set(normalized, result);
+        // Só o acerto entra no cache: a Open Library cai e dá timeout com frequência, e
+        // guardar esse null por uma semana transformaria uma queda de minutos em "esse
+        // livro não existe" até o próximo deploy.
+        if (result) this.isbnCache.set(normalized, result);
         return result;
     }
 
@@ -109,6 +114,26 @@ export class BookSearchService {
 
         this.genreCache.set(cacheKey, results);
         return results;
+    }
+
+    /**
+     * Junta o que as duas bases sabem do mesmo ISBN, campo a campo: vale o primeiro
+     * valor preenchido, com a Open Library na frente (é a edição exata do código de
+     * barras; o Google resolve por busca e às vezes devolve outra tiragem).
+     */
+    private mergeEditions(openLibrary: SearchBookDTO | null, google: SearchBookDTO | null): SearchBookDTO | null {
+        const primary = openLibrary ?? google;
+        if (!primary) return null;
+
+        return {
+            ...primary,
+            title: openLibrary?.title ?? google?.title ?? primary.title,
+            author: openLibrary?.author || google?.author || null,
+            totalPages: openLibrary?.totalPages || google?.totalPages || 0,
+            details: openLibrary?.details || google?.details || null,
+            coverUrl: openLibrary?.coverUrl || google?.coverUrl || null,
+            publishedDate: openLibrary?.publishedDate || google?.publishedDate || null,
+        };
     }
 
     private clampLimit(maxResults?: number): number {

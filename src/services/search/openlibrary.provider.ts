@@ -11,6 +11,9 @@ import { SupportedLanguage, toMarcLanguage } from './language';
  */
 
 const SEARCH_ENDPOINT = 'https://openlibrary.org/search.json';
+// A Open Library responde entre 1s e 11s conforme a hora. Sem teto, uma resposta lenta
+// dela vira uma tela girando no app; com teto, o pior caso é perder o enriquecimento.
+const OL_TIMEOUT_MS = 12_000;
 const COVER_ENDPOINT = 'https://covers.openlibrary.org/b/id';
 
 // Só os campos que usamos: resposta menor, busca mais rápida.
@@ -79,8 +82,9 @@ export function workIdFromKey(key: string): string {
     return key.replace('/works/', '');
 }
 
-export function coverUrlFor(coverId?: number): string | null {
-    return typeof coverId === 'number' ? `${COVER_ENDPOINT}/${coverId}-M.jpg` : null;
+/** `M` (~180px) serve a lista; a tela de detalhe mostra a capa em ~450px e pede `L`. */
+export function coverUrlFor(coverId?: number, size: 'M' | 'L' = 'M'): string | null {
+    return typeof coverId === 'number' ? `${COVER_ENDPOINT}/${coverId}-${size}.jpg` : null;
 }
 
 export function toDTO(doc: OpenLibraryDoc): SearchBookDTO {
@@ -105,7 +109,7 @@ async function fetchDocs(params: URLSearchParams): Promise<OpenLibraryDoc[]> {
         // termo com aspas (ex.: subject:"science fiction") precisa decodificar de
         // volta com decodeURIComponent, que não entende "+" como espaço.
         const query = params.toString().replace(/\+/g, '%20');
-        const response = await fetch(`${SEARCH_ENDPOINT}?${query}`);
+        const response = await fetch(`${SEARCH_ENDPOINT}?${query}`, { signal: AbortSignal.timeout(OL_TIMEOUT_MS) });
         if (!response.ok) {
             console.error('Open Library error:', response.status);
             return [];
@@ -145,7 +149,7 @@ interface IsbnEdition {
 /** Registro da EDIÇÃO com aquele ISBN. 404 (ou qualquer falha) vira null. */
 async function fetchEdition(isbn: string): Promise<IsbnEdition | null> {
     try {
-        const response = await fetch(`${ISBN_ENDPOINT}/${isbn}.json`);
+        const response = await fetch(`${ISBN_ENDPOINT}/${isbn}.json`, { signal: AbortSignal.timeout(OL_TIMEOUT_MS) });
         if (!response.ok) return null;
         return (await response.json()) as IsbnEdition;
     } catch (error) {
@@ -167,26 +171,32 @@ async function fetchEdition(isbn: string): Promise<IsbnEdition | null> {
  * o heurístico de popularidade separa obra de derivado numa busca por texto, e aqui o
  * livro já está na mão do usuário, mesmo sendo um título de nicho.
  */
-export async function lookupIsbn(isbn: string): Promise<OpenLibraryDoc | null> {
+export async function lookupIsbn(isbn: string): Promise<SearchBookDTO | null> {
     const edition = await fetchEdition(isbn);
     const workKey = edition?.works?.[0]?.key;
-    if (!workKey) return null;
+    if (!edition || !workKey) return null;
 
-    const docs = await fetchDocs(new URLSearchParams({
+    // Best effort: a obra só acrescenta autor e sinopse. Se ela demorar ou falhar,
+    // devolvemos a edição mesmo assim — perder o livro inteiro por causa do enfeite
+    // era o que fazia um livro válido aparecer como "não encontrado" no scanner.
+    const doc = (await fetchDocs(new URLSearchParams({
         q: `key:${workKey}`,
         fields: SEARCH_FIELDS,
         limit: '1',
-    }));
-    const doc = docs[0];
-    if (!doc) return null;
+    })))[0];
 
     // A edição é o objeto físico na mão do usuário: título, páginas e capa dela ganham
     // dos valores da obra (que são o canônico em inglês e a mediana de todas as edições).
     return {
-        ...doc,
-        title: edition?.title ?? doc.title,
-        number_of_pages_median: edition?.number_of_pages ?? doc.number_of_pages_median,
-        cover_i: edition?.covers?.[0] ?? doc.cover_i,
+        id: doc ? workIdFromKey(doc.key) : workIdFromKey(workKey),
+        title: edition.title ?? doc?.title ?? 'Untitled',
+        author: doc?.author_name?.join(', ') ?? null,
+        totalPages: edition.number_of_pages ?? doc?.number_of_pages_median ?? 0,
+        details: doc ? toDTO(doc).details : null,
+        // `L` porque a tela de detalhe mostra a capa em ~450px; `M` sai borrada lá.
+        coverUrl: coverUrlFor(edition.covers?.[0] ?? doc?.cover_i, 'L'),
+        language: doc?.language?.[0] ?? 'eng',
+        publishedDate: doc?.first_publish_year ? String(doc.first_publish_year) : null,
     };
 }
 
@@ -242,7 +252,7 @@ export async function localizedEdition(
 ): Promise<LocalizedEdition | null> {
     const marc = toMarcLanguage(lang);
     try {
-        const response = await fetch(`${WORKS_ENDPOINT}/${workId}/editions.json?limit=${EDITIONS_LIMIT}`);
+        const response = await fetch(`${WORKS_ENDPOINT}/${workId}/editions.json?limit=${EDITIONS_LIMIT}`, { signal: AbortSignal.timeout(OL_TIMEOUT_MS) });
         if (!response.ok) return null;
 
         const data = (await response.json()) as EditionsResponse;
