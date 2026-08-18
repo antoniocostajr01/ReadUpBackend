@@ -30,6 +30,27 @@ export class BookController {
         }
     };
 
+    // Lookup por ISBN (scanner de código de barras). Pública, ver book.routes.ts.
+    lookup = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            const isbn = (req.query.isbn as string | undefined)?.trim() ?? '';
+            if (!isbn) {
+                res.status(400).json({ error: 'ISBN is required' });
+                return;
+            }
+
+            const result = await this.bookSearchService.lookupIsbn(isbn);
+            if (!result) {
+                res.status(404).json({ error: 'Book not found for this ISBN' });
+                return;
+            }
+
+            res.status(200).json(result);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    };
+
     create = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             const book = await this.bookService.createBook(req.body, req.userId!, this.baseUrlFor(req));
