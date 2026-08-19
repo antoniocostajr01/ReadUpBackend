@@ -81,7 +81,12 @@ export class BookService {
             author: book.author,
             totalPages: book.totalPages,
             details: book.details,
-            coverUrl: book.coverImage ? `${baseUrl}/books/${book.id}/cover` : book.coverUrl,
+            // `?v=` muda quando a imagem muda: a rota da capa é sempre a mesma, então
+            // sem isso o app (URLCache e cache em memória) continuava mostrando a capa
+            // antiga depois de o usuário trocar a foto.
+            coverUrl: book.coverImage
+                ? `${baseUrl}/books/${book.id}/cover?v=${book.coverImage.length}`
+                : book.coverUrl,
             isbn: book.isbn,
             status: book.status,
             progress: book.progress,
