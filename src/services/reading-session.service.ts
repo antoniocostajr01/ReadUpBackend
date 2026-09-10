@@ -6,11 +6,35 @@ import {
     ReadingSessionResponseDTO,
 } from '../dtos/reading-session.dto';
 
+// Puro de propósito (sem Prisma) pra poder testar sem banco. Agora que o app
+// pode reenviar sessões que ficaram na fila offline, `date` chega do cliente
+// e precisa ser validada aqui, junto com pagesRead/readingTimeSeconds que
+// nunca tinham checagem nenhuma.
+export function validateCreateSessionInput(data: CreateReadingSessionDTO): void {
+    if (!Number.isInteger(data.pagesRead) || data.pagesRead < 0) {
+        throw new Error('Invalid pagesRead');
+    }
+    if (!Number.isInteger(data.readingTimeSeconds) || data.readingTimeSeconds < 0) {
+        throw new Error('Invalid readingTimeSeconds');
+    }
+    if (data.date !== undefined) {
+        const parsed = new Date(data.date);
+        if (isNaN(parsed.getTime())) {
+            throw new Error('Invalid date');
+        }
+        if (parsed.getTime() > Date.now()) {
+            throw new Error('Date cannot be in the future');
+        }
+    }
+}
+
 export class ReadingSessionService {
     private sessionRepository = new ReadingSessionRepository();
     private bookService = new BookService();
 
     async createSession(data: CreateReadingSessionDTO, userId: string): Promise<ReadingSessionResponseDTO> {
+        validateCreateSessionInput(data);
+
         // Garante que o livro existe e pertence ao usuário (lança 'Book not found'/'Access denied').
         await this.bookService.getBookById(data.bookId, userId);
 

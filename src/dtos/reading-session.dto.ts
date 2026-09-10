@@ -3,6 +3,9 @@ export interface CreateReadingSessionDTO {
     pagesRead: number;
     thoughts?: string;
     readingTimeSeconds: number;
+    // ISO8601. Só vem preenchido ao reenviar uma sessão que ficou pendente no
+    // app (offline); um save normal deixa o backend carimbar a data.
+    date?: string;
 }
 
 export interface UpdateReadingSessionDTO {

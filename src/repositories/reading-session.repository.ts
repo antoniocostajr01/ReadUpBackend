@@ -10,6 +10,9 @@ export class ReadingSessionRepository {
                 thoughts: data.thoughts,
                 readingTimeSeconds: data.readingTimeSeconds,
                 userId: userId,
+                // Só sobrescreve o default (`now()`) quando o cliente manda uma
+                // data — caso de replay de sessão que ficou pendente offline.
+                ...(data.date ? { date: new Date(data.date) } : {}),
             },
         });
     }
