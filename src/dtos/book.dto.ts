@@ -48,3 +48,13 @@ export interface BookResponseDTO {
     userId: string;
     createdAt: Date;
 }
+
+/** Uma página da estante (`GET /books?limit=&offset=`). */
+export interface BookPageDTO {
+    items: BookResponseDTO[];
+    total: number;
+    hasMore: boolean;
+}
+
+/** Contagem por status para os chips da estante (`GET /books/counts`). */
+export type BookCountsDTO = { all: number } & Record<BookStatus, number>;

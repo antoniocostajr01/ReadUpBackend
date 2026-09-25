@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { AuthService } from "../services/auth.service";
+import { AuthService, RefreshTokenError } from "../services/auth.service";
+import { AuthRequest } from "../middlewares/auth.middleware";
 
 export class AuthController {
     private authService = new AuthService();
@@ -55,6 +56,45 @@ export class AuthController {
             res.status(200).json({ message: 'Password updated successfully.' });
         } catch (error: any) {
             res.status(400).json({ error: error.message });
+        }
+    }
+
+    refresh = async (req: Request, res: Response): Promise<void> => {
+        const refreshToken = req.body?.refreshToken;
+        if (!refreshToken || typeof refreshToken !== 'string') {
+            res.status(400).json({ error: 'refreshToken is required.' });
+            return;
+        }
+        try {
+            res.status(200).json(await this.authService.refresh(refreshToken));
+        } catch (error: any) {
+            // Só um refresh inválido é 401: é o único caso em que o app deve deslogar.
+            // Falha de banco vira 500 e o app tenta de novo depois.
+            const status = error instanceof RefreshTokenError ? 401 : 500;
+            res.status(status).json({ error: error.message });
+        }
+    }
+
+    // Autenticada pelo access token (authMiddleware): quem atualizou da 2.2 ganha
+    // um refresh sem precisar logar de novo.
+    session = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            res.status(200).json(await this.authService.issueForUser(req.userId!));
+        } catch (error: any) {
+            const status = error instanceof RefreshTokenError ? 401 : 500;
+            res.status(status).json({ error: error.message });
+        }
+    }
+
+    logout = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const refreshToken = req.body?.refreshToken;
+            if (typeof refreshToken === 'string' && refreshToken) {
+                await this.authService.logout(refreshToken);
+            }
+            res.status(204).send();
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
         }
     }
 }

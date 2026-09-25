@@ -30,27 +30,32 @@ model User {
   genres             String[]  @default([])
   createdAt          DateTime  @default(now())
 
-  books    Book[]
-  sessions ReadingSession[]
+  books         Book[]
+  sessions      ReadingSession[]
+  refreshTokens RefreshToken[]
 }
 
 model Book {
-  id         String     @id @default(uuid())
-  userId     String
-  title      String
-  author     String?
-  totalPages Int
-  details    String?
-  coverUrl   String?
-  isbn       String?
-  coverImage String?    @db.Text
-  status     BookStatus @default(reading)
-  progress   Int        @default(0)
-  createdAt  DateTime   @default(now())
+  id           String     @id @default(uuid())
+  userId       String
+  title        String
+  author       String?
+  totalPages   Int
+  details      String?
+  coverUrl     String?
+  isbn         String?
+  coverImage   String?    @db.Text
+  // Muda a cada capa enviada: vira o `?v=` do coverUrl, sem precisar ler o base64.
+  coverVersion Int?
+  status       BookStatus @default(reading)
+  progress     Int        @default(0)
+  createdAt    DateTime   @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
   sessions ReadingSession[]
+
+  @@index([userId, title])
 }
 
 model ReadingSession {
@@ -64,4 +69,20 @@ model ReadingSession {
 
   user User @relation(fields: [userId], references: [id])
   book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
+
+// Refresh token opaco. Só o hash sha256 fica no banco.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  // Quando foi trocado por outro na rotação: dá a janela de tolerância.
+  replacedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

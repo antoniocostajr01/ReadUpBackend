@@ -24,7 +24,10 @@ export class UserController {
             const user = await this.userService.getMe(req.userId!);
             res.status(200).json(user);
         } catch (error: any) {
-            res.status(404).json({ error: error.message });
+            // 404 faz o app deslogar. Só pode sair quando a conta realmente não existe —
+            // uma falha de banco (cold start, pooler cheio) é 500, e o app tenta de novo.
+            const status = error.message === 'User not found.' ? 404 : 500;
+            res.status(status).json({ error: error.message });
         }
     };
 

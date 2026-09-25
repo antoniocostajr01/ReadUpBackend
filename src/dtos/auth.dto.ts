@@ -13,6 +13,12 @@ export interface LoginResponseDTO {
         genres: string[];
     };
     token: string;
+    refreshToken: string;
+}
+
+export interface TokenPairDTO {
+    token: string;
+    refreshToken: string;
 }
 
 export interface AppleLoginRequestDTO {

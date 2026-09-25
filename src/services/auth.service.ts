@@ -1,7 +1,9 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { createHash, randomBytes } from 'node:crypto';
 import appleSignin from 'apple-signin-auth';
 import { UserRepository } from '../repositories/user.repository';
+import { RefreshTokenRepository } from '../repositories/refresh-token.repository';
 import { EmailService } from './email.service';
 import {
     LoginRequestDTO,
@@ -9,11 +11,63 @@ import {
     AppleLoginRequestDTO,
     ForgotPasswordRequestDTO,
     ResetPasswordRequestDTO,
+    TokenPairDTO,
 } from '../dtos/auth.dto';
+
+// O access token continua com 7 dias: a 2.2, que está na loja e não sabe renovar,
+// depende disso para não deslogar ainda mais cedo. Quem renova é o refresh.
+const ACCESS_TOKEN_TTL = '7d';
+// Deslizante: cada renovação emite um refresh novo com mais 90 dias.
+const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+// Se o app morre entre o servidor rotacionar e o Keychain gravar o token novo, ele
+// volta com o antigo. Dentro desta janela isso não é roubo, é só azar: emite outro par.
+const REFRESH_REUSE_GRACE_MS = 60 * 1000;
+
+export class RefreshTokenError extends Error {}
+
+function hashToken(raw: string): string {
+    return createHash('sha256').update(raw).digest('hex');
+}
 
 export class AuthService {
     private userRepository = new UserRepository();
+    private refreshTokenRepository = new RefreshTokenRepository();
     private emailService = new EmailService();
+
+    /** Troca um refresh token válido por um par novo (rotação). */
+    async refresh(rawRefreshToken: string): Promise<TokenPairDTO> {
+        const stored = await this.refreshTokenRepository.findByHash(hashToken(rawRefreshToken));
+        const now = new Date();
+
+        if (!stored || stored.expiresAt < now) {
+            throw new RefreshTokenError('Invalid or expired refresh token.');
+        }
+
+        if (stored.revokedAt) {
+            const withinGrace = stored.replacedAt
+                && now.getTime() - stored.replacedAt.getTime() < REFRESH_REUSE_GRACE_MS;
+            if (!withinGrace) {
+                throw new RefreshTokenError('Invalid or expired refresh token.');
+            }
+            return this.issueTokens(stored.userId);
+        }
+
+        await this.refreshTokenRepository.markReplaced(stored.id, now);
+        return this.issueTokens(stored.userId);
+    }
+
+    /** Para quem veio da 2.2 com um access token válido e nenhum refresh. */
+    async issueForUser(userId: string): Promise<TokenPairDTO> {
+        const user = await this.userRepository.findById(userId);
+        if (!user) {
+            throw new RefreshTokenError('User not found.');
+        }
+        return this.issueTokens(userId);
+    }
+
+    async logout(rawRefreshToken: string): Promise<void> {
+        await this.refreshTokenRepository.revoke(hashToken(rawRefreshToken));
+    }
 
     async login(data: LoginRequestDTO): Promise<LoginResponseDTO> {
 
@@ -34,7 +88,7 @@ export class AuthService {
             throw new Error('Incorrect e-mail address or password');
         }
 
-        const token = this.generateToken(user.id);
+        const { token, refreshToken } = await this.issueTokens(user.id);
 
         //Devolver usuário com token
         return {
@@ -45,7 +99,8 @@ export class AuthService {
                 avatar: user.avatar,
                 genres: user.genres
             },
-            token
+            token,
+            refreshToken,
         }
     }
 
@@ -94,7 +149,7 @@ export class AuthService {
             });
         }
 
-        const token = this.generateToken(user.id);
+        const { token, refreshToken } = await this.issueTokens(user.id);
 
         return {
             user: {
@@ -105,6 +160,7 @@ export class AuthService {
                 genres: user.genres,
             },
             token,
+            refreshToken,
         };
     }
 
@@ -152,6 +208,20 @@ export class AuthService {
             resetCodeHash: null,
             resetCodeExpiresAt: null,
         });
+        // Senha nova derruba as sessões abertas em outros aparelhos.
+        await this.refreshTokenRepository.revokeAllForUser(user.id);
+    }
+
+    private async issueTokens(userId: string): Promise<TokenPairDTO> {
+        const refreshToken = randomBytes(32).toString('base64url');
+        await this.refreshTokenRepository.create(
+            userId,
+            hashToken(refreshToken),
+            new Date(Date.now() + REFRESH_TOKEN_TTL_MS)
+        );
+        // Não bloqueia a resposta: é só faxina.
+        this.refreshTokenRepository.deleteExpiredForUser(userId).catch(() => {});
+        return { token: this.generateToken(userId), refreshToken };
     }
 
     private generateToken(userId: string): string {
@@ -159,6 +229,6 @@ export class AuthService {
         if (!secret) {
             throw new Error('JWT_SECRET is not configured on the server.');
         }
-        return jwt.sign({ userId }, secret, { expiresIn: '7d' });
+        return jwt.sign({ userId }, secret, { expiresIn: ACCESS_TOKEN_TTL });
     }
 }

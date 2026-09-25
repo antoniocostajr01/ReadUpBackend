@@ -60,10 +60,31 @@ export class BookController {
         }
     };
 
+    // Sem `limit`, devolve a estante inteira como array — é o contrato da 2.2 que
+    // ainda está na loja. Com `limit`, devolve uma página `{ items, total, hasMore }`.
     getAll = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
-            const books = await this.bookService.getUserBooks(req.userId!, this.baseUrlFor(req));
-            res.status(200).json(books);
+            if (req.query.limit === undefined) {
+                const books = await this.bookService.getUserBooks(req.userId!, this.baseUrlFor(req));
+                res.status(200).json(books);
+                return;
+            }
+            const page = await this.bookService.getUserBooksPage(req.userId!, {
+                limit: Number(req.query.limit),
+                offset: req.query.offset ? Number(req.query.offset) : 0,
+                status: req.query.status as string | undefined,
+                q: req.query.q as string | undefined,
+            }, this.baseUrlFor(req));
+            res.status(200).json(page);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    };
+
+    counts = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            const counts = await this.bookService.getStatusCounts(req.userId!, req.query.q as string | undefined);
+            res.status(200).json(counts);
         } catch (error: any) {
             res.status(400).json({ error: error.message });
         }

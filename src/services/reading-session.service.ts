@@ -1,3 +1,4 @@
+import { BookStatus } from '@prisma/client';
 import { ReadingSessionRepository } from '../repositories/reading-session.repository';
 import { BookService } from './book.service';
 import {
@@ -36,9 +37,14 @@ export class ReadingSessionService {
         validateCreateSessionInput(data);
 
         // Garante que o livro existe e pertence ao usuário (lança 'Book not found'/'Access denied').
-        await this.bookService.getBookById(data.bookId, userId);
+        const book = await this.bookService.getBookById(data.bookId, userId);
 
         const session = await this.sessionRepository.create(data, userId);
+        // Ler um livro da lista "quero ler" é começar a lê-lo. O app faz o mesmo no PUT
+        // de progresso; isto cobre clientes antigos (a 2.2 não mandava o status).
+        if (book.status === BookStatus.i_want_to_read) {
+            await this.bookService.markAsReading(book.id);
+        }
         return this.toResponseDTO(session);
     }
 

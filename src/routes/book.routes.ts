@@ -17,6 +17,8 @@ bookRoutes.use(authMiddleware);
 
 bookRoutes.post('/', bookController.create);
 bookRoutes.get('/', bookController.getAll);
+// Antes de /:id, senão "counts" vira um id.
+bookRoutes.get('/counts', bookController.counts);
 bookRoutes.get('/:id', bookController.getById);
 bookRoutes.put('/:id', bookController.update);
 bookRoutes.delete('/:id', bookController.delete);
